@@ -46,7 +46,7 @@ def get_owned_item_or_404(db: Session, owner_id: UUID, wishlist_id: UUID, item_i
     return item
 
 
-def reserve_item(db: Session, public_id: str, item_id: UUID, anonymous_note: str | None) -> WishlistItem:
+def reserve_item(db: Session, public_id: str, item_id: UUID, anonymous_note: str | None) -> tuple[WishlistItem, str]:
     wishlist = get_public_wishlist_or_404(db, public_id)
     if wishlist.is_archived:
         raise HTTPException(status_code=400, detail='Wishlist is archived')
@@ -63,14 +63,15 @@ def reserve_item(db: Session, public_id: str, item_id: UUID, anonymous_note: str
     if item.is_reserved:
         raise HTTPException(status_code=409, detail='Item already reserved')
 
-    reservation = Reservation(wishlist_item_id=item.id, status='active', anonymous_note=anonymous_note)
+    release_token = secrets.token_urlsafe(24)
+    reservation = Reservation(wishlist_item_id=item.id, status='active', release_token=release_token, anonymous_note=anonymous_note)
     item.is_reserved = True
     db.add(reservation)
     db.flush()
-    return item
+    return item, release_token
 
 
-def release_item(db: Session, public_id: str, item_id: UUID) -> WishlistItem:
+def release_item(db: Session, public_id: str, item_id: UUID, release_token: str) -> WishlistItem:
     wishlist = get_public_wishlist_or_404(db, public_id)
     item = db.execute(
         select(WishlistItem)
@@ -82,11 +83,17 @@ def release_item(db: Session, public_id: str, item_id: UUID) -> WishlistItem:
 
     active_res = db.execute(
         select(Reservation)
-        .where(Reservation.wishlist_item_id == item.id, Reservation.status == 'active')
+        .where(
+            Reservation.wishlist_item_id == item.id,
+            Reservation.status == 'active',
+            Reservation.release_token == release_token,
+        )
         .with_for_update()
     ).scalar_one_or_none()
-    if active_res:
-        active_res.status = 'released'
+    if not active_res:
+        raise HTTPException(status_code=403, detail='Invalid release token')
+
+    active_res.status = 'released'
     item.is_reserved = False
     db.flush()
     return item
