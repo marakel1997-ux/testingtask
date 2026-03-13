@@ -81,7 +81,7 @@ Frontend default URL: `http://localhost:3000`
 ### Frontend (`frontend/.env.local`)
 | Variable | Required | Description | Example |
 |---|---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | yes | Base URL for browser API requests. | `http://localhost:8000/api/v1` |
+| `NEXT_PUBLIC_API_BASE_URL` | yes | Base URL for browser API requests. Use `/api/v1` for local dev (proxied by Next.js). | `/api/v1` |
 
 ---
 

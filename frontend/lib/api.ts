@@ -1,4 +1,5 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '/api/v1';
+const LOCAL_PROXY_BASE = '/api/v1';
 
 const BACKEND_UNAVAILABLE_ERROR =
   `Failed to reach API at ${API_BASE}. Make sure backend is running and NEXT_PUBLIC_API_BASE_URL is correct.`;
