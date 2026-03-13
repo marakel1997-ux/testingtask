@@ -85,7 +85,7 @@ def release_item(db: Session, public_id: str, item_id: UUID) -> WishlistItem:
     return item
 
 
-def contribute_to_item(db: Session, public_id: str, item_id: UUID, amount: Decimal, currency: str, message: str | None) -> WishlistItem:
+def contribute_to_item(db: Session, public_id: str, item_id: UUID, amount: Decimal, currency: str, message: str | None) -> tuple[WishlistItem, bool]:
     wishlist = get_public_wishlist_or_404(db, public_id)
     if wishlist.is_archived:
         raise HTTPException(status_code=400, detail='Wishlist is archived')
@@ -106,7 +106,8 @@ def contribute_to_item(db: Session, public_id: str, item_id: UUID, amount: Decim
     db.flush()
 
     total = db.execute(select(func.coalesce(func.sum(Contribution.amount), 0)).where(Contribution.wishlist_item_id == item.id)).scalar_one()
+    was_fully_funded = item.is_fully_funded
     item.amount_collected = total
     item.is_fully_funded = total >= item.target_price
     db.flush()
-    return item
+    return item, (not was_fully_funded and item.is_fully_funded)
