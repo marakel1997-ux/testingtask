@@ -1,11 +1,9 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal, get_db
-from app.models import Wishlist
 from app.realtime import build_item_event, build_snapshot_event, realtime_broker
 from app.schemas.wishlist import PublicContributeRequest, PublicReserveRequest, PublicWishlistOut, WishlistItemOut
 from app.services.wishlist_service import contribute_to_item, get_public_wishlist_or_404, release_item, reserve_item
@@ -15,9 +13,7 @@ router = APIRouter(prefix='/public/w', tags=['public'])
 
 @router.get('/{public_id}', response_model=PublicWishlistOut)
 def get_public_wishlist(public_id: str, db: Session = Depends(get_db)):
-    wishlist = db.execute(select(Wishlist).where(Wishlist.public_id == public_id).options(selectinload(Wishlist.items))).scalar_one_or_none()
-    if not wishlist:
-        get_public_wishlist_or_404(db, public_id)
+    wishlist = get_public_wishlist_or_404(db, public_id)
     visible_items = [i for i in wishlist.items if not i.is_deleted]
     return PublicWishlistOut(
         public_id=wishlist.public_id,
@@ -34,8 +30,9 @@ def get_public_wishlist(public_id: str, db: Session = Depends(get_db)):
 async def wishlist_events(public_id: str, websocket: WebSocket):
     db = SessionLocal()
     try:
-        wishlist = db.execute(select(Wishlist).where(Wishlist.public_id == public_id).options(selectinload(Wishlist.items))).scalar_one_or_none()
-        if not wishlist:
+        try:
+            wishlist = get_public_wishlist_or_404(db, public_id)
+        except Exception:
             await websocket.close(code=1008)
             return
 

@@ -93,13 +93,23 @@ def update_item(wishlist_id: UUID, item_id: UUID, payload: WishlistItemUpdate, c
 async def delete_item(wishlist_id: UUID, item_id: UUID, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     item = get_owned_item_or_404(db, current_user.id, wishlist_id, item_id)
     public_id = item.wishlist.public_id
-    has_contribs = db.execute(select(WishlistItem.id).where(WishlistItem.id == item.id, WishlistItem.amount_collected > 0)).scalar_one_or_none()
+    has_contribs = item.amount_collected > 0
+    was_reserved = item.is_reserved
     if has_contribs:
         item.is_deleted = True
         item.deleted_reason = 'owner_removed_with_contributions'
+        item.is_reserved = False
         db.commit()
         db.refresh(item)
         await realtime_broker.broadcast(public_id, build_item_event('item_soft_deleted', public_id, item))
     else:
-        db.delete(item)
-        db.commit()
+        if was_reserved:
+            item.is_deleted = True
+            item.deleted_reason = 'owner_removed_after_reservation'
+            item.is_reserved = False
+            db.commit()
+            db.refresh(item)
+            await realtime_broker.broadcast(public_id, build_item_event('item_soft_deleted', public_id, item))
+        else:
+            db.delete(item)
+            db.commit()
