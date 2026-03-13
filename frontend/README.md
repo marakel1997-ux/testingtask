@@ -1,13 +1,12 @@
 # Frontend (Next.js)
 
-Planned frontend app for GiftCircle MVP.
+GiftCircle frontend built with Next.js App Router, TypeScript, and Tailwind CSS.
 
-## Stack
-- Next.js + TypeScript
-- Tailwind CSS
-- WebSocket client for realtime wishlist updates
+## Run
 
-## Initial Notes
-- Public wishlist pages are unauthenticated.
-- Owner dashboard requires auth.
-- All contributor/reserver details are anonymized from owner views.
+```bash
+npm install
+npm run dev
+```
+
+Create `.env.local` from `.env.example` if needed.
