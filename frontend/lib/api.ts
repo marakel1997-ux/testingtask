@@ -1,7 +1,11 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '/api/v1';
+const LOCAL_PROXY_BASE = '/api/v1';
 
-export async function api<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+const BACKEND_UNAVAILABLE_ERROR =
+  `Failed to reach API at ${API_BASE}. Make sure backend is running and NEXT_PUBLIC_API_BASE_URL is correct.`;
+
+async function doFetch(path: string, init?: RequestInit, token?: string): Promise<Response> {
+  return fetch(`${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -10,6 +14,20 @@ export async function api<T>(path: string, init?: RequestInit, token?: string): 
     },
     cache: 'no-store'
   });
+}
+
+export async function api<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
+  let response: Response;
+
+  try {
+    response = await doFetch(`${API_BASE}${path}`, init, token);
+  } catch {
+    try {
+      response = await doFetch(`${LOCAL_PROXY_BASE}${path}`, init, token);
+    } catch {
+      throw new Error(BACKEND_UNAVAILABLE_ERROR);
+    }
+  }
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
