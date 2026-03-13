@@ -1,214 +1,209 @@
-# GiftCircle MVP (Social Wishlist App)
+# GiftCircle
 
-Production-oriented MVP for social wishlists with anonymous reservations, partial gift funding, and realtime updates.
+GiftCircle is a full-stack wishlist application designed for events (birthdays, holidays, baby showers, etc.) where gift-givers can reserve or partially fund items without revealing identity to the list owner.
 
-## 1) Proposed Architecture
+The repository contains:
+- **Frontend:** Next.js (App Router) + TypeScript + Tailwind CSS
+- **Backend:** FastAPI + SQLAlchemy + Alembic + PostgreSQL
+- **Docs:** Product decision notes and submission context
 
-### Monorepo Layout
-- `frontend/`: Next.js (App Router) + TypeScript + Tailwind CSS.
-- `backend/`: FastAPI + SQLAlchemy + Alembic + PostgreSQL.
-- `docs/`: Product and technical decision notes.
+---
 
-### High-Level Design
-- **Frontend (Next.js)**
-  - Private owner dashboard (authenticated): create/manage wishlists and items.
-  - Public wishlist page (no auth): reserve/contribute anonymously.
-  - WebSocket client subscription for realtime item state updates.
-  - Form validation with shared schema patterns (Zod client-side).
+## 1) Setup Instructions
 
-- **Backend (FastAPI)**
-  - REST API for CRUD/auth/public actions.
-  - WebSocket hub for per-wishlist channels.
-  - Domain services enforcing product rules (duplicate reservation prevention, funding consistency, soft-delete behavior).
-  - URL metadata extraction endpoint for item autofill.
+### Prerequisites
+- **Node.js** 18+
+- **Python** 3.11+
+- **PostgreSQL** 14+
+- **npm** (or compatible package manager)
 
-- **Data Layer (PostgreSQL)**
-  - Normalized core entities with soft delete/archive flags.
-  - Aggregated fields for fast public rendering (`amount_collected`, `is_reserved`, `is_fully_funded`).
-  - Migration-driven schema changes via Alembic.
+### Clone and enter the repository
+```bash
+git clone <your-repo-url>
+cd testingtask
+```
 
-### Realtime Strategy
-- WebSocket endpoint scoped by `wishlist_public_id`.
-- Backend broadcasts item state changes (reservation/contribution/item lifecycle).
-- Frontend optimistic UI + server reconciliation on events.
+### Backend setup
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+alembic upgrade head
+uvicorn app.main:app --reload
+```
 
-### Security & Privacy
-- Owner auth: email + password (JWT access/refresh).
-- Public pages never expose contributor identity.
-- Owner API responses include only anonymous funding/reservation status.
-- Write endpoints protected by rate limiting + basic abuse controls (MVP-safe defaults).
+Backend default URL: `http://localhost:8000`
 
-## 2) Proposed Database Schema
+### Frontend setup
+In a separate terminal:
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
 
-### `users`
-- `id` (PK, UUID)
-- `email` (unique, indexed)
-- `password_hash`
-- `display_name` (optional)
-- `created_at`, `updated_at`
+Frontend default URL: `http://localhost:3000`
 
-### `wishlists`
-- `id` (PK, UUID)
-- `owner_id` (FK -> users.id, indexed)
-- `title`
-- `description` (optional)
-- `event_type` (birthday/holiday/custom)
-- `event_date` (optional)
-- `public_id` (unique, URL-safe token, indexed)
-- `is_archived` (bool)
-- `created_at`, `updated_at`
+---
 
-### `wishlist_items`
-- `id` (PK, UUID)
-- `wishlist_id` (FK -> wishlists.id, indexed)
-- `title`
-- `product_url`
-- `image_url` (optional)
-- `description` (optional)
-- `target_price` (numeric(10,2))
-- `currency` (char(3), default `USD`)
-- `amount_collected` (numeric(10,2), default `0`)
-- `is_reserved` (bool, derived + stored cache)
-- `is_fully_funded` (bool, derived + stored cache)
-- `is_deleted` (bool soft delete flag)
-- `deleted_reason` (nullable; e.g. `owner_removed_with_contributions`)
-- `created_at`, `updated_at`
+## 2) Local Development Steps
 
-### `reservations`
-- `id` (PK, UUID)
-- `wishlist_item_id` (FK -> wishlist_items.id, unique where active)
-- `status` (`active`, `released`)
-- `anonymous_note` (optional)
-- `created_at`, `updated_at`
+1. **Start Postgres** and ensure the database in `DATABASE_URL` exists.
+2. **Run backend migrations** with `alembic upgrade head`.
+3. **Start backend** (`uvicorn app.main:app --reload`).
+4. **Start frontend** (`npm run dev`).
+5. Open:
+   - `http://localhost:3000` (frontend)
+   - `http://localhost:8000/health` (backend health check)
+6. Register a user via the app UI.
+7. Create a wishlist in the dashboard.
+8. Open the public wishlist URL in another browser/incognito session to validate anonymous reservation and contribution behavior.
 
-### `contributions`
-- `id` (PK, UUID)
-- `wishlist_item_id` (FK -> wishlist_items.id, indexed)
-- `amount` (numeric(10,2), >0)
-- `currency` (char(3))
-- `message` (optional)
-- `created_at`
+---
 
-### Optional utility tables (MVP-ready)
-- `refresh_tokens` for secure session handling.
-- `audit_events` for operational debugging.
+## 3) Environment Variables
 
-### Key Constraints/Rules
-- Active reservation uniqueness per item.
-- `amount_collected` equals sum(contributions.amount) via service-layer update + DB check safety.
-- Item delete behavior:
-  - If no contributions: hard delete allowed.
-  - If contributions exist: soft-delete item, preserve title snapshot + funding totals.
+### Backend (`backend/.env`)
+| Variable | Required | Description | Example |
+|---|---|---|---|
+| `APP_NAME` | no | API service display name. | `GiftCircle API` |
+| `API_V1_PREFIX` | no | Base API route prefix. | `/api/v1` |
+| `DATABASE_URL` | yes | SQLAlchemy connection string. | `postgresql+psycopg://postgres:postgres@localhost:5432/giftcircle` |
+| `JWT_SECRET` | yes | JWT signing secret (must be strong in non-local envs). | `replace-with-strong-random-secret` |
+| `JWT_ALGORITHM` | no | JWT algorithm. | `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | no | Access token TTL in minutes. | `60` |
 
-## 3) Planned REST API Routes
+### Frontend (`frontend/.env.local`)
+| Variable | Required | Description | Example |
+|---|---|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | yes | Base URL for browser API requests. | `http://localhost:8000/api/v1` |
 
-Base prefix: `/api/v1`
+---
 
-### Auth
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/refresh`
-- `POST /auth/logout`
-- `GET /auth/me`
+## 4) Architecture Overview
 
-### Owner Wishlist Management (auth required)
-- `GET /wishlists`
-- `POST /wishlists`
-- `GET /wishlists/{wishlist_id}`
-- `PATCH /wishlists/{wishlist_id}`
-- `DELETE /wishlists/{wishlist_id}` (archive or delete per policy)
-- `POST /wishlists/{wishlist_id}/archive`
-- `POST /wishlists/{wishlist_id}/unarchive`
-
-### Owner Item Management (auth required)
-- `POST /wishlists/{wishlist_id}/items`
-- `PATCH /wishlists/{wishlist_id}/items/{item_id}`
-- `DELETE /wishlists/{wishlist_id}/items/{item_id}`
-
-### Public Read (no auth)
-- `GET /public/w/{public_id}` (wishlist + visible items)
-
-### Public Actions (no auth)
-- `POST /public/w/{public_id}/items/{item_id}/reserve`
-- `POST /public/w/{public_id}/items/{item_id}/release`
-- `POST /public/w/{public_id}/items/{item_id}/contribute`
-
-### Metadata Autofill
-- `POST /metadata/extract` with `{ url }` -> `{ title, image_url, price, currency }`
-
-## 4) Planned Frontend Pages
-
-### Public
-- `/w/[publicId]` — public wishlist page with reserve/contribute interactions.
-- `/w/not-found` — polished invalid/expired link page.
-
-### Auth
-- `/login`
-- `/register`
-
-### Owner App
-- `/app` — dashboard overview and create wishlist CTA.
-- `/app/wishlists/new`
-- `/app/wishlists/[wishlistId]` — edit wishlist, manage items, view anonymous progress.
-- `/app/wishlists/[wishlistId]/settings`
-
-### Shared UX states
-- Skeleton loaders, error toasts, empty state illustrations, mobile-optimized cards, funding badges, and progress bars.
-
-## 5) Planned Realtime Events (WebSocket)
-
-Channel: `wishlist:{public_id}`
-
-### Server -> Client events
-- `wishlist.snapshot`
-  - initial state when connected.
-- `item.reservation.updated`
-  - `{ item_id, is_reserved }`
-- `item.contribution.added`
-  - `{ item_id, amount_collected, is_fully_funded, contribution_count }`
-- `item.updated`
-  - item edits visible to public.
-- `item.soft_deleted`
-  - preserve funded placeholder semantics.
-- `wishlist.archived`
-  - public page transitions to archived state.
-
-### Client behavior
-- Public viewers subscribe on page load and patch local cache.
-- Owner dashboard subscribes to same channel but receives only anonymized payloads.
-
-## 6) Initial Project Structure Created
-
+### Monorepo layout
 ```text
 .
 ├─ backend/
 │  ├─ app/
-│  │  ├─ api/
-│  │  ├─ core/
-│  │  ├─ db/
-│  │  ├─ models/
-│  │  ├─ realtime/
-│  │  ├─ schemas/
-│  │  └─ services/
-│  ├─ alembic/
-│  │  └─ versions/
-│  ├─ tests/
-│  ├─ .env.example
-│  └─ README.md
+│  │  ├─ api/          # REST routes and dependency injection
+│  │  ├─ core/         # app configuration and security helpers
+│  │  ├─ db/           # DB setup/session/base
+│  │  ├─ models/       # SQLAlchemy entities
+│  │  ├─ schemas/      # Pydantic schemas
+│  │  ├─ services/     # domain logic (wishlist + metadata behavior)
+│  │  └─ realtime.py   # websocket connection manager + events
+│  └─ alembic/         # DB migrations
 ├─ frontend/
-│  ├─ app/
-│  ├─ components/
-│  ├─ lib/
-│  ├─ styles/
-│  ├─ .env.example
-│  └─ README.md
+│  ├─ app/             # pages/routes (public + auth + dashboard)
+│  ├─ components/      # UI building blocks
+│  └─ lib/             # API client/types/auth storage
 └─ docs/
    └─ product-decisions.md
 ```
 
-## Product Decision Notes (MVP)
-- Anonymous-only contributor model to preserve surprise by default.
-- Reservation is single-active-lock per item.
-- Funding supports unlimited partial contributions from public visitors.
-- Owner-facing views never receive contributor identity fields.
+### Request/data flow
+1. Frontend calls backend REST APIs for auth, wishlist management, and public actions.
+2. Backend persists state in PostgreSQL and applies domain constraints in service layer.
+3. Public and owner clients subscribe to realtime websocket channels per wishlist.
+4. Backend pushes incremental events (reservation/funding/item updates) to keep clients synchronized.
 
+---
+
+## 5) Product Decisions
+
+Key MVP decisions:
+- **Surprise-first privacy:** owner never sees contributor identity.
+- **Anonymous participation:** reserving/contributing is optimized for low-friction guest users.
+- **Soft-delete semantics:** items with contributions are preserved as historical records instead of hard-deleted.
+- **Realtime consistency:** websocket updates are used to reduce stale state across tabs and viewers.
+- **Graceful fallback UX:** invalid public links route to explicit not-found pages.
+
+More detail is available in `docs/product-decisions.md`.
+
+---
+
+## 6) Edge-Case Decisions
+
+- **Concurrent reservations:** only one active reservation is allowed for an item.
+- **Overfunding prevention:** contributions cannot exceed remaining item amount.
+- **Fully funded transitions:** item status flips to fully funded once target is reached; additional contributions are blocked.
+- **Deletion with historical money data:** contributed items remain as soft-deleted records to preserve totals/auditability.
+- **Realtime reconnect behavior:** clients should treat snapshot events as source-of-truth after reconnect.
+
+---
+
+## 7) Deployment Steps
+
+### Backend deployment (example flow)
+1. Provision PostgreSQL.
+2. Set backend environment variables (`DATABASE_URL`, `JWT_SECRET`, etc.).
+3. Install dependencies: `pip install -r requirements.txt`.
+4. Run migrations: `alembic upgrade head`.
+5. Start service with production ASGI command, e.g.:
+   ```bash
+   uvicorn app.main:app --host 0.0.0.0 --port 8000
+   ```
+6. Put behind reverse proxy (Nginx/Cloud load balancer) with TLS.
+
+### Frontend deployment (example flow)
+1. Set `NEXT_PUBLIC_API_BASE_URL` to deployed backend API URL.
+2. Build app:
+   ```bash
+   npm ci
+   npm run build
+   ```
+3. Run app:
+   ```bash
+   npm run start
+   ```
+4. Deploy on Vercel or a Node-compatible host.
+
+---
+
+## 8) Known Limitations
+
+- No automated end-to-end test suite is currently included.
+- No rate-limiting/abuse mitigation middleware is currently implemented.
+- No refresh-token/logout token revocation store is currently present.
+- URL metadata extraction is planned but not fully integrated end-to-end.
+
+---
+
+## 9) Demo Checklist (for testers)
+
+Use this quick script during QA:
+
+1. Create and login to an owner account.
+2. Create a wishlist and add at least two items.
+3. Open the public wishlist link in a private/incognito window.
+4. Reserve one item as guest and confirm owner view reflects reservation state.
+5. Contribute partial funding to another item and confirm progress updates.
+6. Contribute remaining amount to mark item fully funded.
+7. Attempt an extra contribution and verify it is blocked.
+8. Verify invalid public slug shows not-found experience.
+9. Verify `/health` returns `{ "status": "ok" }`.
+
+---
+
+## 10) Useful Commands
+
+### Backend
+```bash
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+### Frontend
+```bash
+cd frontend
+npm run dev
+npm run lint
+npm run build
+```
