@@ -40,6 +40,20 @@ class WishlistItemUpdate(BaseModel):
     currency: str | None = Field(default=None, min_length=3, max_length=3)
 
 
+class MetadataAutofillRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=1000)
+
+
+class MetadataAutofillOut(BaseModel):
+    ok: bool
+    title: str | None = None
+    image_url: str | None = None
+    target_price: Decimal | None = None
+    product_url: str | None = None
+    fallback_title: str
+    message: str
+
+
 class PublicReserveRequest(BaseModel):
     anonymous_note: str | None = Field(default=None, max_length=500)
 

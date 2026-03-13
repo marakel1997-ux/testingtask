@@ -26,3 +26,13 @@ export type Wishlist = {
 export type WishlistDetail = Wishlist & { items: WishlistItem[] };
 
 export type PublicWishlist = Omit<Wishlist, 'id'> & { items: WishlistItem[] };
+
+export type ItemMetadataAutofill = {
+  ok: boolean;
+  title?: string | null;
+  image_url?: string | null;
+  target_price?: string | number | null;
+  product_url?: string | null;
+  fallback_title: string;
+  message: string;
+};

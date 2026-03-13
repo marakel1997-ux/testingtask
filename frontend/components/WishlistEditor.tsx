@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { auth } from '@/lib/auth';
-import { WishlistDetail } from '@/lib/types';
+import { ItemMetadataAutofill, WishlistDetail } from '@/lib/types';
 import { ProgressBar } from './ProgressBar';
 import { StatusBadge } from './StatusBadge';
 import { currency } from '@/lib/utils';
@@ -23,6 +23,15 @@ export function WishlistEditor({ wishlistId }: { wishlistId?: string }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [itemSaving, setItemSaving] = useState(false);
+  const [autofillLoading, setAutofillLoading] = useState(false);
+  const [itemForm, setItemForm] = useState({
+    title: '',
+    target_price: '',
+    currency: 'USD',
+    product_url: '',
+    image_url: '',
+    description: ''
+  });
   const router = useRouter();
   const { push } = useToast();
 
@@ -72,13 +81,46 @@ export function WishlistEditor({ wishlistId }: { wishlistId?: string }) {
     }
   }
 
+  async function autofillFromUrl() {
+    const productUrl = itemForm.product_url.trim();
+    if (!productUrl) {
+      setError('Paste a product URL first.');
+      return;
+    }
+    if (!/^https?:\/\//i.test(productUrl)) {
+      setError('Product URL must start with http:// or https://.');
+      return;
+    }
+
+    setError('');
+    setAutofillLoading(true);
+    try {
+      const data = await api<ItemMetadataAutofill>(
+        '/wishlists/items/autofill',
+        { method: 'POST', body: JSON.stringify({ url: productUrl }) },
+        token
+      );
+      setItemForm((prev) => ({
+        ...prev,
+        product_url: data.product_url ?? productUrl,
+        title: data.title ?? prev.title ?? data.fallback_title,
+        image_url: data.image_url ?? prev.image_url,
+        target_price: data.target_price ? String(data.target_price) : prev.target_price
+      }));
+      push(data.ok ? 'Metadata autofilled. You can still edit anything.' : data.message);
+    } catch (e) {
+      setError(ownerError((e as Error).message));
+    } finally {
+      setAutofillLoading(false);
+    }
+  }
+
   async function addItem(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!wishlistId) return;
-    const form = new FormData(e.currentTarget);
-    const title = String(form.get('title') ?? '').trim();
-    const targetPrice = Number(form.get('target_price'));
-    const productUrl = String(form.get('product_url') ?? '').trim();
+    const title = itemForm.title.trim();
+    const targetPrice = Number(itemForm.target_price);
+    const productUrl = itemForm.product_url.trim();
 
     if (!title) {
       setError('Please add an item title.');
@@ -101,15 +143,15 @@ export function WishlistEditor({ wishlistId }: { wishlistId?: string }) {
         body: JSON.stringify({
           title,
           target_price: targetPrice,
-          currency: form.get('currency'),
+          currency: itemForm.currency,
           product_url: productUrl || null,
-          image_url: String(form.get('image_url') ?? '').trim() || null,
-          description: String(form.get('description') ?? '').trim() || null
+          image_url: itemForm.image_url.trim() || null,
+          description: itemForm.description.trim() || null
         })
       }, token);
       push('Item added');
       await refreshWishlist();
-      (e.target as HTMLFormElement).reset();
+      setItemForm({ title: '', target_price: '', currency: 'USD', product_url: '', image_url: '', description: '' });
     } catch (e) {
       setError(ownerError((e as Error).message));
     } finally {
@@ -143,13 +185,18 @@ export function WishlistEditor({ wishlistId }: { wishlistId?: string }) {
         <>
           <form onSubmit={addItem} className="card grid gap-3 p-5 md:grid-cols-2 md:p-6">
             <h2 className="text-lg font-semibold md:col-span-2">Add item</h2>
-            <input className="input" name="title" placeholder="Item title" required />
-            <input className="input" type="number" min={0.01} step="0.01" name="target_price" placeholder="Target amount" required />
-            <input className="input" name="currency" defaultValue="USD" maxLength={3} required />
-            <input className="input" name="product_url" placeholder="Product URL (optional)" />
-            <input className="input md:col-span-2" name="image_url" placeholder="Image URL (optional)" />
-            <textarea className="input md:col-span-2" name="description" placeholder="Description" />
-            <p className="text-xs text-slate-500 md:col-span-2">Autofill is optional in this MVP. If product metadata fails, enter details manually and continue.</p>
+            <input className="input" name="title" placeholder="Item title" required value={itemForm.title} onChange={(e) => setItemForm((prev) => ({ ...prev, title: e.target.value }))} />
+            <input className="input" type="number" min={0.01} step="0.01" name="target_price" placeholder="Target amount" required value={itemForm.target_price} onChange={(e) => setItemForm((prev) => ({ ...prev, target_price: e.target.value }))} />
+            <input className="input" name="currency" maxLength={3} required value={itemForm.currency} onChange={(e) => setItemForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))} />
+            <div className="flex gap-2 md:col-span-2">
+              <input className="input" name="product_url" placeholder="Product URL (optional)" value={itemForm.product_url} onChange={(e) => setItemForm((prev) => ({ ...prev, product_url: e.target.value }))} />
+              <button type="button" className="btn-primary whitespace-nowrap" onClick={autofillFromUrl} disabled={autofillLoading}>
+                {autofillLoading ? 'Autofilling…' : 'Autofill from URL'}
+              </button>
+            </div>
+            <input className="input md:col-span-2" name="image_url" placeholder="Image URL (optional)" value={itemForm.image_url} onChange={(e) => setItemForm((prev) => ({ ...prev, image_url: e.target.value }))} />
+            <textarea className="input md:col-span-2" name="description" placeholder="Description" value={itemForm.description} onChange={(e) => setItemForm((prev) => ({ ...prev, description: e.target.value }))} />
+            <p className="text-xs text-slate-500 md:col-span-2">Autofill is optional. You can edit any field before submitting.</p>
             <button className="btn-primary md:col-span-2" disabled={itemSaving}>{itemSaving ? 'Adding item…' : 'Add item to wishlist'}</button>
           </form>
 

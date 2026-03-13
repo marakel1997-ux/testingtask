@@ -11,12 +11,15 @@ from app.realtime import build_item_event, realtime_broker
 from app.schemas.wishlist import (
     WishlistCreate,
     WishlistDetailOut,
+    MetadataAutofillOut,
+    MetadataAutofillRequest,
     WishlistItemCreate,
     WishlistItemOut,
     WishlistItemUpdate,
     WishlistOut,
     WishlistUpdate,
 )
+from app.services.metadata_service import fetch_url_metadata
 from app.services.wishlist_service import generate_public_id, get_owned_item_or_404, get_owned_wishlist_or_404
 
 router = APIRouter(prefix='/wishlists', tags=['wishlists'])
@@ -64,6 +67,12 @@ def archive_wishlist(wishlist_id: UUID, current_user: User = Depends(get_current
     wishlist = get_owned_wishlist_or_404(db, current_user.id, wishlist_id)
     wishlist.is_archived = True
     db.commit()
+
+
+@router.post('/items/autofill', response_model=MetadataAutofillOut)
+def autofill_item_metadata(payload: MetadataAutofillRequest, current_user: User = Depends(get_current_user)):
+    _ = current_user
+    return fetch_url_metadata(payload.url)
 
 
 @router.post('/{wishlist_id}/items', response_model=WishlistItemOut, status_code=201)
