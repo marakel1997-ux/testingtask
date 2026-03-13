@@ -58,6 +58,8 @@ Frontend default URL: `http://localhost:3000`
 5. Open:
    - `http://localhost:3000` (frontend)
    - `http://localhost:8000/health` (backend health check)
+
+   > Note: `http://localhost:8000/` returns `404 Not Found` by design. Keep the backend terminal running (do not press `Ctrl+C`) while testing login/register from the frontend.
 6. Register a user via the app UI.
 7. Create a wishlist in the dashboard.
 8. Open the public wishlist URL in another browser/incognito session to validate anonymous reservation and contribution behavior.
