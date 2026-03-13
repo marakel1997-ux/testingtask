@@ -130,6 +130,7 @@ More detail is available in `docs/product-decisions.md`.
 ## 6) Edge-Case Decisions
 
 - **Concurrent reservations:** only one active reservation is allowed for an item.
+- **Reservation ownership:** releasing a reservation requires a one-time release token issued to the reserver; other guests cannot cancel someone else's hold.
 - **Overfunding prevention:** contributions cannot exceed remaining item amount.
 - **Fully funded transitions:** item status flips to fully funded once target is reached; additional contributions are blocked.
 - **Deletion with historical money data:** contributed items remain as soft-deleted records to preserve totals/auditability.

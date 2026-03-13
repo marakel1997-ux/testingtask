@@ -58,6 +58,10 @@ class PublicReserveRequest(BaseModel):
     anonymous_note: str | None = Field(default=None, max_length=500)
 
 
+class PublicReleaseRequest(BaseModel):
+    release_token: str = Field(min_length=10, max_length=128)
+
+
 class PublicContributeRequest(BaseModel):
     amount: Decimal = Field(gt=0)
     currency: str = Field(default='USD', min_length=3, max_length=3)
@@ -79,6 +83,11 @@ class WishlistItemOut(ORMModel):
     deleted_reason: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class PublicReserveOut(BaseModel):
+    item: WishlistItemOut
+    release_token: str
 
 
 class WishlistOut(ORMModel):

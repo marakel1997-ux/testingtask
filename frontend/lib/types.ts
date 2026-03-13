@@ -36,3 +36,9 @@ export type ItemMetadataAutofill = {
   fallback_title: string;
   message: string;
 };
+
+
+export type PublicReserveResponse = {
+  item: WishlistItem;
+  release_token: string;
+};

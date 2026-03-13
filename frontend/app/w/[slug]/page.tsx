@@ -4,13 +4,15 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { PublicWishlist, WishlistItem } from '@/lib/types';
+import { PublicReserveResponse, PublicWishlist, WishlistItem } from '@/lib/types';
 import { currency } from '@/lib/utils';
 import { ProgressBar } from '@/components/ProgressBar';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 
 const CONNECTION_WARNING = 'Live updates disconnected. You can still refresh to see the latest status.';
+
+const reservationKey = (slug: string, itemId: string) => `gc-reservation:${slug}:${itemId}`;
 
 function normalizeError(message: string) {
   if (message.includes('already reserved')) return 'Someone else reserved this item moments ago. Pick another item or contribute instead.';
@@ -19,6 +21,7 @@ function normalizeError(message: string) {
   if (message.includes('Item not found')) return 'This item is no longer available. The owner may have removed it.';
   if (message.includes('Wishlist not found')) return 'This public link is invalid or has expired.';
   if (message.includes('Wishlist is archived')) return 'This wishlist has been archived. New reservations and contributions are disabled.';
+  if (message.includes('Invalid release token')) return 'Only the person who reserved this item can release it from this browser.';
   return message;
 }
 
@@ -28,6 +31,7 @@ export default function PublicWishlistPage({ params }: { params: { slug: string 
   const [loading, setLoading] = useState(true);
   const [reserveLoadingId, setReserveLoadingId] = useState<string | null>(null);
   const [contributeLoadingId, setContributeLoadingId] = useState<string | null>(null);
+  const [releaseLoadingId, setReleaseLoadingId] = useState<string | null>(null);
   const [connectionWarning, setConnectionWarning] = useState('');
   const router = useRouter();
   const { push } = useToast();
@@ -68,6 +72,8 @@ export default function PublicWishlistPage({ params }: { params: { slug: string 
   }, [params.slug, wishlist?.public_id]);
 
   const archived = wishlist?.is_archived;
+
+  const hasReleaseToken = (itemId: string) => typeof window !== 'undefined' && Boolean(localStorage.getItem(reservationKey(params.slug, itemId)));
   const items = useMemo(() => wishlist?.items ?? [], [wishlist]);
 
   async function reserve(itemId: string, e: FormEvent<HTMLFormElement>) {
@@ -76,16 +82,41 @@ export default function PublicWishlistPage({ params }: { params: { slug: string 
     setError('');
     setReserveLoadingId(itemId);
     try {
-      await api(`/public/w/${params.slug}/items/${itemId}/reserve`, {
+      const reserved = await api<PublicReserveResponse>(`/public/w/${params.slug}/items/${itemId}/reserve`, {
         method: 'POST',
         body: JSON.stringify({ anonymous_note: form.get('anonymous_note') || null })
       });
-      push('Reserved. The owner only sees anonymous status.');
+      localStorage.setItem(reservationKey(params.slug, itemId), reserved.release_token);
+      push('Reserved. You can release this later from this browser.');
       (e.target as HTMLFormElement).reset();
     } catch (err) {
       setError(normalizeError((err as Error).message));
     } finally {
       setReserveLoadingId(null);
+    }
+  }
+
+
+  async function release(itemId: string) {
+    const releaseToken = localStorage.getItem(reservationKey(params.slug, itemId));
+    if (!releaseToken) {
+      setError('We could not find your reservation token in this browser.');
+      return;
+    }
+
+    setError('');
+    setReleaseLoadingId(itemId);
+    try {
+      await api(`/public/w/${params.slug}/items/${itemId}/release`, {
+        method: 'POST',
+        body: JSON.stringify({ release_token: releaseToken })
+      });
+      localStorage.removeItem(reservationKey(params.slug, itemId));
+      push('Reservation released.');
+    } catch (err) {
+      setError(normalizeError((err as Error).message));
+    } finally {
+      setReleaseLoadingId(null);
     }
   }
 
@@ -166,6 +197,11 @@ export default function PublicWishlistPage({ params }: { params: { slug: string 
                         {reserveLoadingId === item.id ? 'Reserving…' : 'Reserve anonymously'}
                       </button>
                     </form>
+                  )}
+                  {item.is_reserved && !item.is_fully_funded && hasReleaseToken(item.id) && (
+                    <button type="button" className="btn-secondary" onClick={() => release(item.id)} disabled={releaseLoadingId === item.id}>
+                      {releaseLoadingId === item.id ? 'Releasing…' : 'Release my reservation'}
+                    </button>
                   )}
                   {!item.is_fully_funded && (
                     <form className="grid gap-2" onSubmit={(e) => contribute(item, e)}>

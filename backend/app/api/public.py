@@ -5,7 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal, get_db
 from app.realtime import build_item_event, build_snapshot_event, realtime_broker
-from app.schemas.wishlist import PublicContributeRequest, PublicReserveRequest, PublicWishlistOut, WishlistItemOut
+from app.schemas.wishlist import (
+    PublicContributeRequest,
+    PublicReleaseRequest,
+    PublicReserveOut,
+    PublicReserveRequest,
+    PublicWishlistOut,
+    WishlistItemOut,
+)
 from app.services.wishlist_service import contribute_to_item, get_public_wishlist_or_404, release_item, reserve_item
 
 router = APIRouter(prefix='/public/w', tags=['public'])
@@ -52,18 +59,18 @@ async def wishlist_events(public_id: str, websocket: WebSocket):
         db.close()
 
 
-@router.post('/{public_id}/items/{item_id}/reserve', response_model=WishlistItemOut)
+@router.post('/{public_id}/items/{item_id}/reserve', response_model=PublicReserveOut)
 async def reserve(public_id: str, item_id: UUID, payload: PublicReserveRequest, db: Session = Depends(get_db)):
-    item = reserve_item(db, public_id, item_id, payload.anonymous_note)
+    item, release_token = reserve_item(db, public_id, item_id, payload.anonymous_note)
     db.commit()
     db.refresh(item)
     await realtime_broker.broadcast(public_id, build_item_event('item_reserved', public_id, item))
-    return item
+    return PublicReserveOut(item=WishlistItemOut.model_validate(item), release_token=release_token)
 
 
 @router.post('/{public_id}/items/{item_id}/release', response_model=WishlistItemOut)
-async def release(public_id: str, item_id: UUID, db: Session = Depends(get_db)):
-    item = release_item(db, public_id, item_id)
+async def release(public_id: str, item_id: UUID, payload: PublicReleaseRequest, db: Session = Depends(get_db)):
+    item = release_item(db, public_id, item_id, payload.release_token)
     db.commit()
     db.refresh(item)
     await realtime_broker.broadcast(public_id, build_item_event('reservation_canceled', public_id, item))
