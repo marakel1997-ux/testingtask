@@ -4,29 +4,21 @@ const LOCAL_PROXY_BASE = '/api/v1';
 const BACKEND_UNAVAILABLE_ERROR =
   `Failed to reach API at ${API_BASE}. Make sure backend is running and NEXT_PUBLIC_API_BASE_URL is correct.`;
 
-async function doFetch(path: string, init?: RequestInit, token?: string): Promise<Response> {
-  return fetch(`${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {})
-    },
-    cache: 'no-store'
-  });
-}
-
 export async function api<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
   let response: Response;
 
   try {
-    response = await doFetch(`${API_BASE}${path}`, init, token);
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {})
+      },
+      cache: 'no-store'
+    });
   } catch {
-    try {
-      response = await doFetch(`${LOCAL_PROXY_BASE}${path}`, init, token);
-    } catch {
-      throw new Error(BACKEND_UNAVAILABLE_ERROR);
-    }
+    throw new Error(BACKEND_UNAVAILABLE_ERROR);
   }
 
   if (!response.ok) {
