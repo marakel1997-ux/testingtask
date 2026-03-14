@@ -17,7 +17,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Email already registered')
 
-    user = User(email=payload.email.lower(), password_hash=hash_password(payload.password), display_name=payload.display_name)
+    try:
+        password_hash = hash_password(payload.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    user = User(email=payload.email.lower(), password_hash=password_hash, display_name=payload.display_name)
     db.add(user)
     db.commit()
     db.refresh(user)
